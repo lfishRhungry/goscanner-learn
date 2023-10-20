@@ -2,16 +2,18 @@ package results
 
 import (
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/csv"
 	"encoding/json"
-	"github.com/rs/zerolog/log"
-	"github.com/tumi8/goscanner/scanner/misc"
-	"github.com/tumi8/goscanner/tls"
-	"golang.org/x/crypto/cryptobyte"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
+	"github.com/tumi8/goscanner/scanner/misc"
+	"github.com/tumi8/goscanner/tls"
+	"golang.org/x/crypto/cryptobyte"
 )
 
 // These are all the extensions where Cisco Mercury or JA3 use the extension data for fingerprinting
@@ -59,7 +61,20 @@ func (t *TLSFingerprintResult) GetCsvFileName() string {
 }
 
 func (t *TLSFingerprintResult) GetCsvHeader() []string {
-	return []string{"id", "server_hello_protocol", "server_hello_cipher", "handshake_key_share_group_13", "server_hello_extensions", "encrypted_extensions", "cert_request_extensions", "hello_retry_extensions", "certificate_extensions", "fingerprint"}
+	return []string{
+		"id",
+		"server_hello_protocol",
+		"server_hello_cipher",
+		"server_hello_length",
+		"handshake_key_share_group_13",
+		"server_hello_extensions_length",
+		"server_hello_extensions",
+		"encrypted_extensions",
+		"cert_request_extensions",
+		"hello_retry_extensions",
+		"certificate_extensions",
+		"fingerprint",
+	}
 }
 
 func (t *TLSFingerprintResult) WriteCsv(writer *csv.Writer, parentResult *ScanResult, synStart time.Time, synEnd time.Time, scanEnd time.Time, skipErrors bool, certCache *misc.CertCache) error {
@@ -76,6 +91,14 @@ func (t *TLSFingerprintResult) WriteCsv(writer *csv.Writer, parentResult *ScanRe
 		}
 	}
 
+	serverHelloLength := ""
+	serverHelloExtensionsLength := ""
+	if t.TLSState.ServerHello.Raw != nil {
+		sessionIdLength := int(t.TLSState.ServerHello.Raw[0x26])
+		serverHelloLength = strconv.Itoa(int(binary.BigEndian.Uint32(append([]byte{0x00}, t.TLSState.ServerHello.Raw[1:4]...))))
+		serverHelloExtensionsLength = strconv.Itoa(int(binary.BigEndian.Uint16(t.TLSState.ServerHello.Raw[42+sessionIdLength : 42+sessionIdLength+2])))
+	}
+
 	tlsFingerprint := fingerprint(protocol, cipher, t.TLSState.SendAlerts, t.TLSState.RecvAlerts, t.TLSState.ServerExtensions, t.TLSState.ServerEncryptedExtensions, t.TLSState.ServerCertRequestExtensions, t.TLSState.HelloRetryRequestExtensions, t.TLSState.CertificateExtensions)
 
 	// Write row in host CSV file
@@ -83,7 +106,9 @@ func (t *TLSFingerprintResult) WriteCsv(writer *csv.Writer, parentResult *ScanRe
 		parentResult.Id.ToString(),
 		protocol,
 		cipher,
+		serverHelloLength,
 		keyShareGroup,
+		serverHelloExtensionsLength,
 		stringifyExtensions(t.TLSState.ServerExtensions),
 		stringifyExtensions(t.TLSState.ServerEncryptedExtensions),
 		stringifyExtensions(t.TLSState.ServerCertRequestExtensions),
