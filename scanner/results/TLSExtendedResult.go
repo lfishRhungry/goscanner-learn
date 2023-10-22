@@ -93,7 +93,7 @@ func (t *TLSFingerprintResult) WriteCsv(writer *csv.Writer, parentResult *ScanRe
 
 	serverHelloLength := ""
 	serverHelloExtensionsLength := ""
-	if t.TLSState.ServerHello.Raw != nil {
+	if t.TLSState.ServerHello != nil && t.TLSState.ServerHello.Raw != nil {
 		sessionIdLength := int(t.TLSState.ServerHello.Raw[0x26])
 		serverHelloLength = strconv.Itoa(int(binary.BigEndian.Uint32(append([]byte{0x00}, t.TLSState.ServerHello.Raw[1:4]...))))
 		serverHelloExtensionsLength = strconv.Itoa(int(binary.BigEndian.Uint16(t.TLSState.ServerHello.Raw[42+sessionIdLength : 42+sessionIdLength+2])))
